@@ -18,8 +18,8 @@ RUN npm run build
 # Serve stage
 FROM nginx:alpine
 
-# Copy nginx config (optional - uses default if not provided)
-# COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy built app from builder stage to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
