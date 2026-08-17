@@ -1,0 +1,132 @@
+name: Build and Deploy
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_NAME: neki-chat-ui
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      TAG: ${{ github.run_number }}
+
+    steps:
+
+    # 🔹 Checkout code
+    - name: Checkout Repository
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@387ac29b308b003ca37ba93a6cab5eb57c8f5f93
+      with:
+        java-version: 21
+        distribution: zulu
+
+    - name: Set up .NET 8
+      uses: actions/setup-dotnet@4d6c8fcf3c8f7a60068d26b594648e99df24cee3
+      with:
+        dotnet-version: 8.0.x
+
+    - name: SonarCloud Scan
+      env:
+        SONAR_HOST_URL: https://sonarcloud.io
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        set -e
+
+        SONAR_SCANNER_VERSION=6.2.1.4610
+        SONAR_SCANNER_ZIP=/tmp/sonar-scanner-cli-$SONAR_SCANNER_VERSION-linux-x64.zip
+
+        curl -fsSLo "$SONAR_SCANNER_ZIP" "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR_SCANNER_VERSION-linux-x64.zip"
+        unzip -oq "$SONAR_SCANNER_ZIP" -d /tmp
+
+        SONAR_SCANNER_DIR=$(find /tmp -maxdepth 2 -type d -name 'sonar-scanner-*' 2>/dev/null | head -n 1)
+        if [ -z "$SONAR_SCANNER_DIR" ]; then
+          echo "SonarScanner directory not found after extraction" >&2
+          exit 1
+        fi
+
+        SONAR_ARGS=(
+          -Dsonar.host.url="$SONAR_HOST_URL"
+          -Dsonar.projectBaseDir=.
+          -Dsonar.projectKey=nekisadaqah_fe-web
+          -Dsonar.organization=nekisadaqah
+          -Dsonar.sources=src
+          -Dsonar.exclusions='**/node_modules/**,**/.next/**,**/dist/**,public/**'
+        )
+
+        if [ -f coverage/lcov.info ]; then
+          SONAR_ARGS+=( -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info )
+        fi
+
+        "$SONAR_SCANNER_DIR/bin/sonar-scanner" "${SONAR_ARGS[@]}"
+
+    # 🔹 Login to Docker Hub
+    - name: Login to Docker Hub
+      uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+
+    # 🔹 Build & Push Docker Image
+    - name: Build and Push Docker Image
+      run: |
+        FULL_IMAGE_NAME=$DOCKER_USERNAME/$IMAGE_NAME:$TAG
+
+        echo "Building image: $FULL_IMAGE_NAME"
+
+        docker build -t $FULL_IMAGE_NAME .
+        docker tag $FULL_IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:latest
+
+        echo "Pushing images..."
+
+        docker push $FULL_IMAGE_NAME
+        docker push $DOCKER_USERNAME/$IMAGE_NAME:latest
+
+    # 🔹 Deploy to VPS via SSH (KEY BASED ✅)
+    - name: Deploy to VPS
+      uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.VPS_PORT || 22 }}
+        timeout: 60s
+        command_timeout: 20m
+        script_stop: true
+        script: |
+          set -e
+
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/neki-chat-ui:${{ github.run_number }}"
+          CONTAINER="neki-chat-ui"
+
+          echo "Deploying $IMAGE"
+
+          # Login to Docker Hub (important if private repo)
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_TOKEN }}
+
+          # Stop & remove old container
+          docker stop $CONTAINER || true
+          docker rm $CONTAINER || true
+
+          # Remove old unused images (optional cleanup)
+          docker image prune -af || true
+
+          # Pull latest image
+          docker pull $IMAGE
+
+          # Run container
+          docker run -d \
+            --name $CONTAINER \
+            -p 7901:3000 \
+            --restart always \
+            $IMAGE
