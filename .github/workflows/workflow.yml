@@ -58,7 +58,7 @@ jobs:
         SONAR_ARGS=(
           -Dsonar.host.url="$SONAR_HOST_URL"
           -Dsonar.projectBaseDir=.
-          -Dsonar.projectKey=nekisadaqah_fe-web
+          -Dsonar.projectKey=nekisadaqah_fe-chat
           -Dsonar.organization=nekisadaqah
           -Dsonar.sources=src
           -Dsonar.exclusions='**/node_modules/**,**/.next/**,**/dist/**,public/**'
@@ -99,7 +99,6 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
-        port: ${{ secrets.VPS_PORT || 22 }}
         timeout: 60s
         command_timeout: 20m
         script_stop: true
@@ -127,6 +126,6 @@ jobs:
           # Run container
           docker run -d \
             --name $CONTAINER \
-            -p 7901:3000 \
+            -p 7903:3000 \
             --restart always \
             $IMAGE
