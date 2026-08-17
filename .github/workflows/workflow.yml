@@ -126,6 +126,6 @@ jobs:
           # Run container
           docker run -d \
             --name $CONTAINER \
-            -p 7903:3000 \
+            -p 7903:80 \
             --restart always \
             $IMAGE
