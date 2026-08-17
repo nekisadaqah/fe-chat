@@ -102,7 +102,6 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(url, {
-        skipNegotiation: true,
         transport: signalR.HttpTransportType.WebSockets
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000]) // Reconnect delays: immediate, 2s, 5s, 10s
