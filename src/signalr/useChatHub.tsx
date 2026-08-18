@@ -114,6 +114,17 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
       messageListenersRef.current.forEach(cb => cb(message));
     });
 
+    newConnection.on('InitialOnlineUsers', (userIds: string[]) => {
+      debugLogger.addLog('SignalR', 'IN', 'InitialOnlineUsers', userIds);
+      setOnlineUsers(prev => {
+        const updated = { ...prev };
+        userIds.forEach(id => {
+          updated[id] = true;
+        });
+        return updated;
+      });
+    });
+
     newConnection.on('UserOnline', (onlineUserId: string) => {
       debugLogger.addLog('SignalR', 'IN', 'UserOnline', { userId: onlineUserId });
       setOnlineUsers(prev => ({ ...prev, [onlineUserId]: true }));
@@ -122,16 +133,18 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     newConnection.on('UserOffline', (onlineUserId: string) => {
       debugLogger.addLog('SignalR', 'IN', 'UserOffline', { userId: onlineUserId });
       setOnlineUsers(prev => ({ ...prev, [onlineUserId]: false }));
+      // Robustly clear typing status for this user if they disconnect/go offline
+      setTypingUsers(prev => ({ ...prev, [onlineUserId]: false }));
     });
 
-    newConnection.on('UserTyping', (username: string) => {
-      debugLogger.addLog('SignalR', 'IN', 'UserTyping', { username });
-      setTypingUsers(prev => ({ ...prev, [username]: true }));
+    newConnection.on('UserTyping', (userId: string) => {
+      debugLogger.addLog('SignalR', 'IN', 'UserTyping', { userId });
+      setTypingUsers(prev => ({ ...prev, [userId]: true }));
     });
 
-    newConnection.on('UserStoppedTyping', (username: string) => {
-      debugLogger.addLog('SignalR', 'IN', 'UserStoppedTyping', { username });
-      setTypingUsers(prev => ({ ...prev, [username]: false }));
+    newConnection.on('UserStoppedTyping', (userId: string) => {
+      debugLogger.addLog('SignalR', 'IN', 'UserStoppedTyping', { userId });
+      setTypingUsers(prev => ({ ...prev, [userId]: false }));
     });
 
     newConnection.onreconnecting((error) => {

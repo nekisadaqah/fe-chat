@@ -25,19 +25,15 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
-  const [sending, setSending] = useState(false);
   
   const { registerMessageListener, sendTyping, sendStopTyping, typingUsers } = useChatHub();
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
-
   const peer = conversation?.otherUser;
   const isPeerOnline = peer ? (onlineUsers[peer.id] ?? peer.isOnline) : false;
-  const isPeerTyping = peer
-    ? (typingUsers[peer.username] || (peer.email ? typingUsers[peer.email.split('@')[0]] : false))
-    : false;
+  const isPeerTyping = peer ? !!typingUsers[peer.id] : false;
 
   // Load message history
   useEffect(() => {
@@ -105,11 +101,10 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
 
-    // Send typing status to hub
+    // Send typing status to hub using current user's ID
     if (peer && !isTypingRef.current) {
       isTypingRef.current = true;
-      const myUsername = currentUserEmail ? currentUserEmail.split('@')[0] : '';
-      sendTyping(peer.id, myUsername);
+      sendTyping(peer.id, currentUserId);
     }
 
     // Reset typing timeout
@@ -117,12 +112,24 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     
     typingTimeoutRef.current = setTimeout(() => {
       isTypingRef.current = false;
-      const myUsername = currentUserEmail ? currentUserEmail.split('@')[0] : '';
       if (peer) {
-        sendStopTyping(peer.id, myUsername);
+        sendStopTyping(peer.id, currentUserId);
       }
     }, 2000);
   };
+
+  // Cleanup typing timeout and status on unmount or chat switch
+  useEffect(() => {
+    return () => {
+      if (isTypingRef.current && peer) {
+        sendStopTyping(peer.id, currentUserId);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      isTypingRef.current = false;
+    };
+  }, [conversation.id, peer?.id]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,11 +141,29 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       return;
     }
     if (!content) return;
-    if (sending) return;
+
+    // Generate unique temporary ID for optimistic UI
+    const tempId = `temp-${Date.now()}`;
+    const tempMessage: Message = {
+      id: tempId,
+      senderId: currentUserId,
+      senderUsername: currentUserEmail ? currentUserEmail.split('@')[0] : 'Me',
+      content: content,
+      conversationId: conversation.id,
+      createdAt: new Date().toISOString(),
+      isSending: true,
+      isDeleted: false,
+      isFromArchive: false,
+      messageType: 'text',
+      readReceipts: []
+    };
 
     try {
-      setSending(true);
       setError(null);
+
+      // Instantly update UI with optimistic message
+      setMessages((prev) => [...prev, tempMessage]);
+      setInputValue(''); // Clear input box immediately
 
       // Log: MESSAGE_SEND_STARTED
       debugLogger.addLog('API', 'OUT', 'MESSAGE_SEND_STARTED', {
@@ -148,32 +173,25 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         timestamp: new Date().toISOString()
       });
 
-      // Instantly stop typing indicator
+      // Instantly stop typing indicator locally and notify recipient
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       isTypingRef.current = false;
-      const myUsername = currentUserEmail ? currentUserEmail.split('@')[0] : '';
       if (peer) {
-        sendStopTyping(peer.id, myUsername);
+        sendStopTyping(peer.id, currentUserId);
       }
 
-      // POST message
+      // POST message in background
       const response = await apiClient.post('/api/Messages', {
         content: content,
         conversationId: conversation.id
       });
       
       const sentMessage: Message = response.data;
-      
-      // Clear the input on success
-      setInputValue('');
 
-      // Deduplicate using message ID to prevent duplicate UI messages
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === sentMessage.id)) {
-          return prev.map((m) => m.id === sentMessage.id ? sentMessage : m);
-        }
-        return [...prev, sentMessage];
-      });
+      // Replace optimistic temp message with the actual message from server
+      setMessages((prev) =>
+        prev.map((m) => m.id === tempId ? sentMessage : m)
+      );
 
       // Log: MESSAGE_SEND_SUCCESS
       debugLogger.addLog('API', 'IN', 'MESSAGE_SEND_SUCCESS', {
@@ -190,6 +208,12 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       const errMsg = err.response?.data?.message || err.message || 'Failed to send message';
       setError(errMsg);
 
+      // Rollback optimistic update on failure (remove the temp message)
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+
+      // Restore the user's typed value so they don't lose it
+      setInputValue(content);
+
       // Log: MESSAGE_SEND_FAILED
       debugLogger.addLog('API', 'IN', 'MESSAGE_SEND_FAILED', {
         conversationId: conversation.id,
@@ -198,9 +222,6 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         status: err.response?.status || 'NET_ERROR',
         errorResponse: err.response?.data || err.message
       });
-    } finally {
-      // ALWAYS reset sending state in finally to prevent UI freezing
-      setSending(false);
     }
   };
 
@@ -316,7 +337,8 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     fontSize: '14px',
                     lineHeight: '1.4',
                     boxShadow: isMe ? 'var(--accent-glow)' : 'none',
-                    wordBreak: 'break-word'
+                    wordBreak: 'break-word',
+                    opacity: msg.isSending ? 0.6 : 1
                   }}>
                     {msg.content}
                   </div>
@@ -330,7 +352,9 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                   }}>
                     <span>{formatMessageTime(msg.createdAt)}</span>
                     {isMe && (
-                      msg.readReceipts && msg.readReceipts.length > 0 ? (
+                      msg.isSending ? (
+                        <Loader2 className="spin" size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : msg.readReceipts && msg.readReceipts.length > 0 ? (
                         <CheckCheck size={12} style={{ color: 'var(--accent-secondary)' }} />
                       ) : (
                         <Check size={12} />
@@ -383,20 +407,15 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
           value={inputValue}
           onChange={handleInputChange}
           style={{ height: '42px' }}
-          disabled={sending}
         />
         <button 
           id="message-send-btn"
           type="submit" 
           className="btn-primary" 
           style={{ width: '42px', height: '42px', padding: 0, borderRadius: '50%', flexShrink: 0 }}
-          disabled={!inputValue.trim() || sending}
+          disabled={!inputValue.trim()}
         >
-          {sending ? (
-            <Loader2 className="spin" size={18} style={{ animation: 'spin 1s linear infinite' }} />
-          ) : (
-            <Send size={18} />
-          )}
+          <Send size={18} />
         </button>
       </form>
       

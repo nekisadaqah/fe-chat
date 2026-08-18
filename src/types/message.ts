@@ -22,5 +22,6 @@ export interface Message {
   editedAt?: string;
   createdAt: string;
   isFromArchive: boolean;
+  isSending?: boolean;
   readReceipts: MessageReadReceipt[];
 }
