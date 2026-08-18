@@ -210,7 +210,14 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minWidth: 0,
+      minHeight: 0,
+      overflow: 'hidden'
+    }}>
       {/* Chat Header */}
       <div className="glass-panel" style={{
         padding: '16px 20px',

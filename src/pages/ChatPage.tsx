@@ -123,11 +123,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ session, onLogout }) => {
         />
       </div>
 
-      {/* Main Workspace */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
+        overflow: 'hidden',
         position: 'relative',
         background: 'radial-gradient(circle at center, rgba(139, 92, 246, 0.05) 0%, transparent 70%)',
         minWidth: 0
