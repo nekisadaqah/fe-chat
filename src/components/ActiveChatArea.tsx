@@ -26,7 +26,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   
-  const { registerMessageListener, sendTyping, sendStopTyping, typingUsers } = useChatHub();
+  const { registerMessageListener, sendTyping, sendStopTyping, typingUsers, sendMessage } = useChatHub();
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -180,13 +180,8 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         sendStopTyping(peer.id, currentUserId);
       }
 
-      // POST message in background
-      const response = await apiClient.post('/api/Messages', {
-        content: content,
-        conversationId: conversation.id
-      });
-      
-      const sentMessage: Message = response.data;
+      // Send message via SignalR hub invocation
+      const sentMessage = await sendMessage(conversation.id, content);
 
       // Replace optimistic temp message with the actual message from server
       setMessages((prev) =>
@@ -194,11 +189,10 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       );
 
       // Log: MESSAGE_SEND_SUCCESS
-      debugLogger.addLog('API', 'IN', 'MESSAGE_SEND_SUCCESS', {
+      debugLogger.addLog('SignalR', 'IN', 'MESSAGE_SEND_SUCCESS', {
         conversationId: conversation.id,
         currentUserId,
         timestamp: new Date().toISOString(),
-        status: response.status,
         response: sentMessage
       });
 

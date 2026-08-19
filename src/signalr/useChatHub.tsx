@@ -12,6 +12,7 @@ interface ChatHubContextType {
   registerMessageListener: (cb: (message: Message) => void) => () => void;
   sendTyping: (recipientUserId: string, senderUsername: string) => Promise<void>;
   sendStopTyping: (recipientUserId: string, senderUsername: string) => Promise<void>;
+  sendMessage: (conversationId: string, content: string) => Promise<Message>;
   
   // Diagnostic parameters for debugging
   hubUrl: string | null;
@@ -286,6 +287,24 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     }
   };
 
+  const sendMessage = async (conversationId: string, content: string): Promise<Message> => {
+    if (connectionRef.current && connectionState === 'CONNECTED') {
+      try {
+        debugLogger.addLog('SignalR', 'OUT', 'SendMessage', { conversationId, content });
+        const result = await connectionRef.current.invoke('SendMessage', {
+          conversationId,
+          content
+        });
+        return result as Message;
+      } catch (err) {
+        console.error('Failed to send message via SignalR', err);
+        throw err;
+      }
+    } else {
+      throw new Error('SignalR connection is not established');
+    }
+  };
+
   return (
     <ChatHubContext.Provider
       value={{
@@ -295,6 +314,7 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
         registerMessageListener,
         sendTyping,
         sendStopTyping,
+        sendMessage,
         hubUrl,
         connectionId,
         lastConnectedTime,
