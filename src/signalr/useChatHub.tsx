@@ -19,8 +19,14 @@ interface ChatHubContextType {
   connectionId: string | null;
   lastConnectedTime: string | null;
   lastReconnectTime: string | null;
-  lastDisconnectTime: string | null;
   lastSignalRError: string | null;
+  previousConnectionId: string | null;
+  lastReconnectingTime: string | null;
+  lastClosedTime: string | null;
+  initialConnectionError: string | null;
+  reconnectCycles: number;
+  reconnectSucceeded: boolean | null;
+  finalCloseReason: string | null;
 }
 
 const ChatHubContext = createContext<ChatHubContextType | null>(null);
@@ -48,8 +54,14 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [lastConnectedTime, setLastConnectedTime] = useState<string | null>(null);
   const [lastReconnectTime, setLastReconnectTime] = useState<string | null>(null);
-  const [lastDisconnectTime, setLastDisconnectTime] = useState<string | null>(null);
   const [lastSignalRError, setLastSignalRError] = useState<string | null>(null);
+  const [previousConnectionId, setPreviousConnectionId] = useState<string | null>(null);
+  const [lastReconnectingTime, setLastReconnectingTime] = useState<string | null>(null);
+  const [lastClosedTime, setLastClosedTime] = useState<string | null>(null);
+  const [initialConnectionError, setInitialConnectionError] = useState<string | null>(null);
+  const [reconnectCycles, setReconnectCycles] = useState<number>(0);
+  const [reconnectSucceeded, setReconnectSucceeded] = useState<boolean | null>(null);
+  const [finalCloseReason, setFinalCloseReason] = useState<string | null>(null);
 
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const messageListenersRef = useRef<Set<(message: Message) => void>>(new Set());
@@ -98,6 +110,13 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
 
     const url = `${window.location.origin}/chathub?userId=${encodeURIComponent(userId)}`;
     setHubUrl(url);
+    debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_CREATE', {
+      timestamp: new Date().toISOString(),
+      userId,
+      hubUrl: url,
+      connectionInstanceId,
+      connectionStateBeforeStart: 'DISCONNECTED'
+    });
     debugLogger.addLog('SignalR', 'EVENT', 'CONNECTING', { url, instanceId: connectionInstanceId });
     setConnectionState('CONNECTING');
 
@@ -151,10 +170,21 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     newConnection.onreconnecting((error) => {
       if (activeInstanceIdRef.current === connectionInstanceId) {
         setConnectionState('RECONNECTING');
+        setPreviousConnectionId(newConnection.connectionId || connectionId);
         setConnectionId(null);
-        setLastDisconnectTime(new Date().toISOString());
+        setLastReconnectingTime(new Date().toISOString());
         setLastSignalRError(error?.message || 'Connection lost, reconnecting...');
-        debugLogger.addLog('SignalR', 'EVENT', 'RECONNECTING', { error: error?.message });
+        setReconnectCycles(prev => prev + 1);
+        setReconnectSucceeded(null);
+        debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_RECONNECTING', {
+          timestamp: new Date().toISOString(),
+          error: error?.message || error?.toString(),
+          userId,
+          previousConnectionId: newConnection.connectionId || connectionId,
+          hubUrl: url,
+          currentConnectionState: 'RECONNECTING',
+          connectionInstanceId
+        });
       }
     });
 
@@ -164,7 +194,14 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
         setConnectionId(connId || null);
         setLastReconnectTime(new Date().toISOString());
         setLastSignalRError(null);
-        debugLogger.addLog('SignalR', 'EVENT', 'RECONNECTED', { connectionId: connId });
+        setReconnectSucceeded(true);
+        debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_RECONNECTED', {
+          timestamp: new Date().toISOString(),
+          newConnectionId: connId,
+          userId,
+          hubUrl: url,
+          connectionInstanceId
+        });
       }
     });
 
@@ -172,11 +209,22 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
       if (activeInstanceIdRef.current === connectionInstanceId) {
         setConnectionState('DISCONNECTED');
         setConnectionId(null);
-        setLastDisconnectTime(new Date().toISOString());
+        setLastClosedTime(new Date().toISOString());
+        setFinalCloseReason(error?.message || 'Clean exit or normal stop');
         if (error) {
           setLastSignalRError(error.message);
+          setReconnectSucceeded(false);
+        } else {
+          setReconnectSucceeded(prev => prev === null ? false : prev);
         }
-        debugLogger.addLog('SignalR', 'EVENT', 'CLOSED', { error: error?.message });
+        debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_CLOSED', {
+          timestamp: new Date().toISOString(),
+          error: error?.message || 'Clean or normal stop',
+          userId,
+          hubUrl: url,
+          finalConnectionState: 'DISCONNECTED',
+          connectionInstanceId
+        });
       }
     });
 
@@ -196,7 +244,12 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
         }
 
         connectionRef.current = newConnection;
-        debugLogger.addLog('SignalR', 'EVENT', 'STARTING', { instanceId: connectionInstanceId });
+        debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_START_ATTEMPT', {
+          timestamp: new Date().toISOString(),
+          userId,
+          hubUrl: url,
+          connectionInstanceId
+        });
         await newConnection.start();
 
         if (isStopped) {
@@ -210,8 +263,12 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
           setConnectionId(newConnection.connectionId);
           setLastConnectedTime(new Date().toISOString());
           setLastSignalRError(null);
-          debugLogger.addLog('SignalR', 'EVENT', 'CONNECTED', {
-            connectionId: newConnection.connectionId
+          debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_CONNECTED', {
+            timestamp: new Date().toISOString(),
+            userId,
+            connectionId: newConnection.connectionId,
+            hubUrl: url,
+            connectionInstanceId
           });
         }
       } catch (error: any) {
@@ -219,9 +276,16 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
         if (activeInstanceIdRef.current === connectionInstanceId) {
           setConnectionState('DISCONNECTED');
           setConnectionId(null);
-          setLastDisconnectTime(new Date().toISOString());
+          setLastClosedTime(new Date().toISOString());
+          setInitialConnectionError(error?.message || error?.toString() || 'Start failed');
           setLastSignalRError(error?.message || 'Connection failed');
-          debugLogger.addLog('SignalR', 'EVENT', 'CONNECTION_FAILED', { error: error?.message });
+          debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_INITIAL_CONNECTION_FAILED', {
+            timestamp: new Date().toISOString(),
+            error: error?.message || error?.toString(),
+            userId,
+            hubUrl: url,
+            connectionInstanceId
+          });
         }
       }
     };
@@ -320,8 +384,14 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
         connectionId,
         lastConnectedTime,
         lastReconnectTime,
-        lastDisconnectTime,
-        lastSignalRError
+        lastSignalRError,
+        previousConnectionId,
+        lastReconnectingTime,
+        lastClosedTime,
+        initialConnectionError,
+        reconnectCycles,
+        reconnectSucceeded,
+        finalCloseReason
       }}
     >
       {children}

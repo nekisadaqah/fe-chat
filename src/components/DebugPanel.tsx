@@ -21,8 +21,14 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ session, selectedConvers
     connectionId,
     lastConnectedTime,
     lastReconnectTime,
-    lastDisconnectTime,
-    lastSignalRError
+    lastSignalRError,
+    previousConnectionId,
+    lastReconnectingTime,
+    lastClosedTime,
+    initialConnectionError,
+    reconnectCycles,
+    reconnectSucceeded,
+    finalCloseReason
   } = useChatHub();
 
   useEffect(() => {
@@ -152,11 +158,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ session, selectedConvers
           </div>
         </div>
 
-        {/* SIGNALR SECTION */}
+        {/* SIGNALR CONNECTION DIAGNOSTICS SECTION */}
         <div className="glass-panel" style={{ padding: '12px', borderRadius: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px' }}>
             <Radio size={14} style={{ color: 'var(--accent-secondary)' }} />
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SignalR Connection</span>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SignalR Connection Diagnostics</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -167,15 +173,21 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ session, selectedConvers
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Connection ID:</span>
+              <span style={{ color: 'var(--text-muted)' }}>Hub URL:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px', wordBreak: 'break-all', fontSize: '10px', color: 'var(--text-muted)' }}>
+                {hubUrl || 'None'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Current Connection ID:</span>
               <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px', wordBreak: 'break-all', color: 'var(--text-secondary)' }}>
                 {connectionId || 'None'}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Hub URL:</span>
-              <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px', wordBreak: 'break-all', fontSize: '10px', color: 'var(--text-muted)' }}>
-                {hubUrl || 'None'}
+              <span style={{ color: 'var(--text-muted)' }}>Previous Connection ID:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '3px', wordBreak: 'break-all', color: 'var(--text-muted)' }}>
+                {previousConnectionId || 'None'}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -183,16 +195,50 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ session, selectedConvers
               <span style={{ color: 'var(--text-primary)' }}>{lastConnectedTime ? new Date(lastConnectedTime).toLocaleTimeString() : 'N/A'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Last Reconnect:</span>
+              <span style={{ color: 'var(--text-muted)' }}>Reconnecting at:</span>
+              <span style={{ color: 'var(--text-primary)' }}>{lastReconnectingTime ? new Date(lastReconnectingTime).toLocaleTimeString() : 'N/A'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Reconnected at:</span>
               <span style={{ color: 'var(--text-primary)' }}>{lastReconnectTime ? new Date(lastReconnectTime).toLocaleTimeString() : 'N/A'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Last Disconnect:</span>
-              <span style={{ color: 'var(--text-primary)' }}>{lastDisconnectTime ? new Date(lastDisconnectTime).toLocaleTimeString() : 'N/A'}</span>
+              <span style={{ color: 'var(--text-muted)' }}>Closed at:</span>
+              <span style={{ color: 'var(--text-primary)' }}>{lastClosedTime ? new Date(lastClosedTime).toLocaleTimeString() : 'N/A'}</span>
             </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Reconnect Cycles:</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{reconnectCycles}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Reconnection Succeeded:</span>
+              <span style={{ 
+                color: reconnectSucceeded === true ? 'var(--status-online)' : 
+                       reconnectSucceeded === false ? 'var(--error)' : 'var(--text-muted)',
+                fontWeight: 600
+              }}>
+                {reconnectSucceeded === true ? 'YES' : reconnectSucceeded === false ? 'NO' : 'N/A'}
+              </span>
+            </div>
+            {finalCloseReason && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Final Close Reason:</span>
+                <span style={{ background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '3px', color: 'var(--text-primary)', fontSize: '10px' }}>
+                  {finalCloseReason}
+                </span>
+              </div>
+            )}
+            {initialConnectionError && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', color: 'var(--error)' }}>
+                <span>Initial Connection Failure:</span>
+                <span style={{ background: 'rgba(239,68,68,0.1)', padding: '4px', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
+                  {initialConnectionError}
+                </span>
+              </div>
+            )}
             {lastSignalRError && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', color: 'var(--error)' }}>
-                <span>Last Error:</span>
+                <span>Last SignalR Error:</span>
                 <span style={{ background: 'rgba(239,68,68,0.1)', padding: '4px', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
                   {lastSignalRError}
                 </span>
