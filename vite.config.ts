@@ -8,8 +8,9 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api/auth': {
-        target: 'http://89.116.20.215:7010',
-        changeOrigin: true
+        target: 'http://89.116.20.215:7000',
+        changeOrigin: true,
+        rewrite: (path) => `/web${path}`
       },
       '/api/Users': {
         target: 'http://89.116.20.215:7510',

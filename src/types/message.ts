@@ -23,5 +23,6 @@ export interface Message {
   createdAt: string;
   isFromArchive: boolean;
   isSending?: boolean;
+  clientMessageId?: string;
   readReceipts: MessageReadReceipt[];
 }

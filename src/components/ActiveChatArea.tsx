@@ -74,7 +74,15 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       // Check if message belongs to this conversation
       if (newMsg.conversationId === conversation.id) {
         setMessages((prev) => {
-          // Avoid duplicate messages using backend message ID
+          // 1. Reconcile matching optimistic message using clientMessageId
+          if (newMsg.clientMessageId) {
+            const hasMatchingOptimistic = prev.some((m) => m.clientMessageId === newMsg.clientMessageId);
+            if (hasMatchingOptimistic) {
+              return prev.map((m) => m.clientMessageId === newMsg.clientMessageId ? newMsg : m);
+            }
+          }
+
+          // 2. Standard check: Avoid duplicate messages using backend message ID
           if (prev.some((m) => m.id === newMsg.id)) {
             // Update the existing message if needed (e.g. read receipts)
             return prev.map((m) => m.id === newMsg.id ? newMsg : m);
@@ -143,7 +151,10 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     if (!content) return;
 
     // Generate unique temporary ID for optimistic UI
-    const tempId = `temp-${Date.now()}`;
+    const tempId = typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? crypto.randomUUID() 
+      : `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     const tempMessage: Message = {
       id: tempId,
       senderId: currentUserId,
@@ -155,6 +166,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       isDeleted: false,
       isFromArchive: false,
       messageType: 'text',
+      clientMessageId: tempId,
       readReceipts: []
     };
 
@@ -181,7 +193,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       }
 
       // Send message via SignalR hub invocation
-      const sentMessage = await sendMessage(conversation.id, content);
+      const sentMessage = await sendMessage(conversation.id, content, tempId);
 
       // Replace optimistic temp message with the actual message from server
       setMessages((prev) =>

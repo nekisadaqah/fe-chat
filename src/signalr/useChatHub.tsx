@@ -12,7 +12,7 @@ interface ChatHubContextType {
   registerMessageListener: (cb: (message: Message) => void) => () => void;
   sendTyping: (recipientUserId: string, senderUsername: string) => Promise<void>;
   sendStopTyping: (recipientUserId: string, senderUsername: string) => Promise<void>;
-  sendMessage: (conversationId: string, content: string) => Promise<Message>;
+  sendMessage: (conversationId: string, content: string, clientMessageId?: string) => Promise<Message>;
   
   // Diagnostic parameters for debugging
   hubUrl: string | null;
@@ -287,13 +287,14 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     }
   };
 
-  const sendMessage = async (conversationId: string, content: string): Promise<Message> => {
+  const sendMessage = async (conversationId: string, content: string, clientMessageId?: string): Promise<Message> => {
     if (connectionRef.current && connectionState === 'CONNECTED') {
       try {
-        debugLogger.addLog('SignalR', 'OUT', 'SendMessage', { conversationId, content });
+        debugLogger.addLog('SignalR', 'OUT', 'SendMessage', { conversationId, content, clientMessageId });
         const result = await connectionRef.current.invoke('SendMessage', {
           conversationId,
-          content
+          content,
+          clientMessageId
         });
         return result as Message;
       } catch (err) {
