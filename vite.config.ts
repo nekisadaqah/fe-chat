@@ -8,24 +8,28 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api/auth': {
-        target: 'http://89.116.20.215:7000',
+        target: process.env.VITE_AUTH_GATEWAY_URL || 'http://localhost:7000',
         changeOrigin: true,
         rewrite: (path) => `/web${path}`
       },
       '/api/Users': {
-        target: 'http://89.116.20.215:7510',
+        target: process.env.VITE_CHAT_GATEWAY_URL || 'http://localhost:7000',
         changeOrigin: true
       },
       '/api/Conversations': {
-        target: 'http://89.116.20.215:7510',
+        target: process.env.VITE_CHAT_GATEWAY_URL || 'http://localhost:7000',
         changeOrigin: true
       },
       '/api/Messages': {
-        target: 'http://89.116.20.215:7510',
+        target: process.env.VITE_CHAT_GATEWAY_URL || 'http://localhost:7000',
+        changeOrigin: true
+      },
+      '/api/Groups': {
+        target: process.env.VITE_CHAT_GATEWAY_URL || 'http://localhost:7000',
         changeOrigin: true
       },
       '/chathub': {
-        target: 'http://89.116.20.215:7510',
+        target: process.env.VITE_CHAT_GATEWAY_URL || 'http://localhost:7000',
         ws: true,
         changeOrigin: true
       }
