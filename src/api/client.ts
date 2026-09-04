@@ -24,6 +24,19 @@ apiClient.interceptors.request.use(
       }
     }
 
+    // Add routing headers required by Web BFF DynamicRoutingHandler
+    if (config.url) {
+      if (!config.url.includes('/api/auth/')) {
+        if (!config.headers['X-Chat-Container']) {
+          config.headers['X-Chat-Container'] = import.meta.env.VITE_CHAT_CONTAINER || 'be-chat';
+        }
+      } else {
+        if (!config.headers['X-Auth-Container']) {
+          config.headers['X-Auth-Container'] = import.meta.env.VITE_AUTH_CONTAINER || 'be-auth';
+        }
+      }
+    }
+
     // Log the outgoing request
     debugLogger.addLog(
       'API',

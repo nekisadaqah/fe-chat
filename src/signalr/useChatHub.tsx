@@ -108,7 +108,10 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     const connectionInstanceId = Math.random().toString(36).substring(2, 9);
     activeInstanceIdRef.current = connectionInstanceId;
 
-    const url = `${window.location.origin}/chathub?userId=${encodeURIComponent(userId)}`;
+    const baseUrl = import.meta.env.VITE_SIGNALR_URL || `${window.location.origin}/chathub`;
+    const url = baseUrl.includes('?') 
+      ? `${baseUrl}&userId=${encodeURIComponent(userId)}` 
+      : `${baseUrl}?userId=${encodeURIComponent(userId)}`;
     setHubUrl(url);
     debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_CREATE', {
       timestamp: new Date().toISOString(),
