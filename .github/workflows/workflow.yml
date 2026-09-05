@@ -130,5 +130,6 @@ jobs:
           docker run -d \
             --name $CONTAINER \
             -p 7903:80 \
+            --add-host=gateway:89.116.20.215 \
             --restart always \
             $IMAGE
