@@ -2,7 +2,7 @@ import axios from 'axios';
 import { debugLogger } from './debugLogger';
 
 // Base URL configured for YARP Gateway /web route
-// e.g. VITE_API_BASE_URL=http://89.116.20.215:7000/web or default '/web'
+// e.g. VITE_API_BASE_URL=http://<gateway-origin>/web or default '/web'
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/web';
 
 const apiClient = axios.create({
