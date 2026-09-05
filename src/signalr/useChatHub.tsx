@@ -108,7 +108,19 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
     const connectionInstanceId = Math.random().toString(36).substring(2, 9);
     activeInstanceIdRef.current = connectionInstanceId;
 
-    const baseUrl = import.meta.env.VITE_SIGNALR_URL || `${window.location.origin}/chathub`;
+    const getSignalRBaseUrl = (): string => {
+      if (import.meta.env.VITE_SIGNALR_URL) {
+        return import.meta.env.VITE_SIGNALR_URL;
+      }
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+      if (apiBaseUrl && (apiBaseUrl.startsWith('http://') || apiBaseUrl.startsWith('https://'))) {
+        const gatewayOrigin = apiBaseUrl.replace(/\/web\/?$/, '');
+        return `${gatewayOrigin}/chathub`;
+      }
+      return `${window.location.origin}/chathub`;
+    };
+
+    const baseUrl = getSignalRBaseUrl();
     const url = baseUrl.includes('?') 
       ? `${baseUrl}&userId=${encodeURIComponent(userId)}` 
       : `${baseUrl}?userId=${encodeURIComponent(userId)}`;

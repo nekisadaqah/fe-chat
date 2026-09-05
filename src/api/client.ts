@@ -11,15 +11,19 @@ const apiClient = axios.create({
   timeout: 10000,
 });
 
-// Request interceptor: logs outgoing requests
+// Request interceptor: logs outgoing requests with full resolved URL (/web/api/...)
 // Internal routing headers (X-Chat-Container, X-Auth-Container) and user identity (X-User-Id)
 // are strictly handled server-side by YARP / Web BFF / be-auth — NEVER attached by frontend.
 apiClient.interceptors.request.use(
   (config) => {
+    const fullUrl = config.baseURL
+      ? `${config.baseURL.replace(/\/$/, '')}${config.url}`
+      : config.url;
+
     debugLogger.addLog(
       'API',
       'OUT',
-      `${config.method?.toUpperCase()} ${config.url}`,
+      `${config.method?.toUpperCase()} ${fullUrl}`,
       {
         headers: { ...config.headers },
         params: config.params,
@@ -38,10 +42,14 @@ apiClient.interceptors.request.use(
 // Response interceptor: logs responses and handles 401 session expiry cleanly
 apiClient.interceptors.response.use(
   (response) => {
+    const fullUrl = response.config.baseURL
+      ? `${response.config.baseURL.replace(/\/$/, '')}${response.config.url}`
+      : response.config.url;
+
     debugLogger.addLog(
       'API',
       'IN',
-      `200 OK | ${response.config.method?.toUpperCase()} ${response.config.url}`,
+      `200 OK | ${response.config.method?.toUpperCase()} ${fullUrl}`,
       {
         status: response.status,
         data: response.data,
@@ -50,6 +58,10 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
+    const fullUrl = error.config?.baseURL
+      ? `${error.config.baseURL.replace(/\/$/, '')}${error.config.url}`
+      : error.config?.url;
+
     const errorDetails = {
       message: error.message,
       status: error.response?.status,
@@ -60,7 +72,7 @@ apiClient.interceptors.response.use(
     debugLogger.addLog(
       'API',
       'IN',
-      `ERROR ${error.response?.status || 'NET'} | ${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+      `ERROR ${error.response?.status || 'NET'} | ${error.config?.method?.toUpperCase()} ${fullUrl}`,
       errorDetails
     );
 
@@ -76,4 +88,5 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+
 
