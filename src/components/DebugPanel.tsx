@@ -306,12 +306,12 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ session, selectedConvers
                 }}>{lastSendLog.name}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Method:</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>POST</span>
+                <span style={{ color: 'var(--text-muted)' }}>Transport:</span>
+                <span style={{ color: 'var(--accent-secondary)', fontWeight: 600 }}>SignalR WebSocket</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>URL:</span>
-                <span style={{ color: 'var(--text-primary)' }}>/api/Messages</span>
+                <span style={{ color: 'var(--text-muted)' }}>Hub Method:</span>
+                <span style={{ color: 'var(--text-primary)' }}>SendMessage (hub invoke)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>HTTP Status:</span>
