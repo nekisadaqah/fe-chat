@@ -1,43 +1,21 @@
 import axios from 'axios';
 import { debugLogger } from './debugLogger';
 
+// Base URL configured for YARP Gateway /web route
+// e.g. VITE_API_BASE_URL=http://89.116.20.215:7000/web or default '/web'
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/web';
+
 const apiClient = axios.create({
+  baseURL,
+  withCredentials: true,
   timeout: 10000,
 });
 
-// Interceptor to inject User ID header for Chat service endpoints
+// Request interceptor: logs outgoing requests
+// Internal routing headers (X-Chat-Container, X-Auth-Container) and user identity (X-User-Id)
+// are strictly handled server-side by YARP / Web BFF / be-auth — NEVER attached by frontend.
 apiClient.interceptors.request.use(
   (config) => {
-    // Only send the X-User-Id header if we have a session stored and the endpoint is not auth
-    const sessionStr = localStorage.getItem('auth_session');
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        if (session && session.userId) {
-          // Add X-User-Id for Chat Service endpoints
-          if (config.url && !config.url.includes('/api/auth/')) {
-            config.headers['X-User-Id'] = session.userId;
-          }
-        }
-      } catch (err) {
-        console.error('Failed to parse auth session in interceptor', err);
-      }
-    }
-
-    // Add routing headers required by Web BFF DynamicRoutingHandler
-    if (config.url) {
-      if (!config.url.includes('/api/auth/')) {
-        if (!config.headers['X-Chat-Container']) {
-          config.headers['X-Chat-Container'] = import.meta.env.VITE_CHAT_CONTAINER || 'be-chat';
-        }
-      } else {
-        if (!config.headers['X-Auth-Container']) {
-          config.headers['X-Auth-Container'] = import.meta.env.VITE_AUTH_CONTAINER || 'be-auth';
-        }
-      }
-    }
-
-    // Log the outgoing request
     debugLogger.addLog(
       'API',
       'OUT',
@@ -57,10 +35,9 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Interceptor to log incoming responses and handle unauthorized states
+// Response interceptor: logs responses and handles 401 session expiry cleanly
 apiClient.interceptors.response.use(
   (response) => {
-    // Log the successful response
     debugLogger.addLog(
       'API',
       'IN',
@@ -73,7 +50,6 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Extract error details
     const errorDetails = {
       message: error.message,
       status: error.response?.status,
@@ -88,10 +64,11 @@ apiClient.interceptors.response.use(
       errorDetails
     );
 
-    // If we get an Unauthorized response for non-auth requests, it might mean the session is invalid
+    // If an unauthenticated 401 status is returned for protected endpoints,
+    // clear local session state cleanly and notify the app to present login.
     if (error.response?.status === 401 && error.config && !error.config.url?.includes('/api/auth/')) {
-      // We don't automatically wipe session here to allow testing/debugging unauthorized states,
-      // but we can bubble it up to the UI.
+      localStorage.removeItem('auth_session');
+      window.dispatchEvent(new Event('auth_session_expired'));
     }
 
     return Promise.reject(error);
@@ -99,3 +76,4 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
+

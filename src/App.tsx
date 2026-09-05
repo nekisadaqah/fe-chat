@@ -25,6 +25,15 @@ function App() {
     };
 
     checkSession();
+
+    const handleSessionExpired = () => {
+      setSession(null);
+    };
+
+    window.addEventListener('auth_session_expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('auth_session_expired', handleSessionExpired);
+    };
   }, []);
 
   const handleLoginSuccess = (newSession: AuthSession) => {
