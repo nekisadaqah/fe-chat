@@ -84,7 +84,10 @@ jobs:
 
         echo "Building image: $FULL_IMAGE_NAME"
 
-        docker build -t $FULL_IMAGE_NAME .
+        docker build \
+          --build-arg VITE_API_BASE_URL=https://api.nekkam.com/web \
+          --build-arg VITE_SIGNALR_URL=https://api.nekkam.com/chathub \
+          -t $FULL_IMAGE_NAME .
         docker tag $FULL_IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:latest
 
         echo "Pushing images..."
@@ -127,5 +130,6 @@ jobs:
           docker run -d \
             --name $CONTAINER \
             -p 7903:80 \
+            --add-host=gateway:89.116.20.215 \
             --restart always \
             $IMAGE
