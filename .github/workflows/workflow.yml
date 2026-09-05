@@ -85,8 +85,8 @@ jobs:
         echo "Building image: $FULL_IMAGE_NAME"
 
         docker build \
-          --build-arg VITE_API_BASE_URL=http://89.116.20.215:7000/web \
-          --build-arg VITE_SIGNALR_URL=http://89.116.20.215:7000/chathub \
+          --build-arg VITE_API_BASE_URL=https://api.nekkam.com/web \
+          --build-arg VITE_SIGNALR_URL=https://api.nekkam.com/chathub \
           -t $FULL_IMAGE_NAME .
         docker tag $FULL_IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:latest
 
