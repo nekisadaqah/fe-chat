@@ -74,19 +74,32 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       // Check if message belongs to this conversation
       if (newMsg.conversationId === conversation.id) {
         setMessages((prev) => {
-          // 1. Reconcile matching optimistic message using clientMessageId
+          // 1. Check if backend message ID is already present in state
+          if (prev.some((m) => m.id === newMsg.id)) {
+            return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
+          }
+
+          // 2. Reconcile matching optimistic message using clientMessageId (if present on newMsg)
           if (newMsg.clientMessageId) {
             const hasMatchingOptimistic = prev.some((m) => m.clientMessageId === newMsg.clientMessageId);
             if (hasMatchingOptimistic) {
-              return prev.map((m) => m.clientMessageId === newMsg.clientMessageId ? newMsg : m);
+              return prev.map((m) => (m.clientMessageId === newMsg.clientMessageId ? newMsg : m));
             }
           }
 
-          // 2. Standard check: Avoid duplicate messages using backend message ID
-          if (prev.some((m) => m.id === newMsg.id)) {
-            // Update the existing message if needed (e.g. read receipts)
-            return prev.map((m) => m.id === newMsg.id ? newMsg : m);
+          // 3. Match pending optimistic message from the same sender by content or temp clientMessageId
+          const matchingPendingIndex = prev.findIndex(
+            (m) =>
+              (m.isSending || (m.clientMessageId && String(m.clientMessageId).startsWith('temp-'))) &&
+              (m.senderId === newMsg.senderId && m.content === newMsg.content)
+          );
+
+          if (matchingPendingIndex !== -1) {
+            const updated = [...prev];
+            updated[matchingPendingIndex] = newMsg;
+            return updated;
           }
+
           return [...prev, newMsg];
         });
       }
@@ -195,10 +208,16 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       // Send message via SignalR hub invocation
       const sentMessage = await sendMessage(conversation.id, content, tempId);
 
-      // Replace optimistic temp message with the actual message from server
-      setMessages((prev) =>
-        prev.map((m) => m.id === tempId ? sentMessage : m)
-      );
+      // Reconcile optimistic temp message with actual server message
+      setMessages((prev) => {
+        // If sentMessage.id is already present in state (e.g. via ReceiveMessage broadcast),
+        // filter out the temp message to avoid duplicates
+        const alreadyHasServerMessage = prev.some((m) => m.id === sentMessage.id);
+        if (alreadyHasServerMessage) {
+          return prev.filter((m) => m.id !== tempId && m.clientMessageId !== tempId);
+        }
+        return prev.map((m) => (m.id === tempId || m.clientMessageId === tempId ? sentMessage : m));
+      });
 
       // Log: MESSAGE_SEND_SUCCESS
       debugLogger.addLog('SignalR', 'IN', 'MESSAGE_SEND_SUCCESS', {
