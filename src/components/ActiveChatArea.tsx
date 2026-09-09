@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client';
 import type { Conversation } from '../types/conversation';
 import type { Message } from '../types/message';
+import { normalizeMessage } from '../types/message';
 import { useChatHub } from '../signalr/useChatHub';
 import { Send, Loader2, CheckCheck, Check } from 'lucide-react';
 import { debugLogger } from '../api/debugLogger';
@@ -46,7 +47,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         });
         
         // PaginatedResponse shape contains .items
-        const loadedMessages: Message[] = response.data.items || [];
+        const loadedMessages: Message[] = (response.data.items || []).map(normalizeMessage);
         
         // Sort chronologically (oldest first)
         const sorted = [...loadedMessages].sort(
@@ -70,7 +71,8 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   useEffect(() => {
     if (!conversation?.id) return;
 
-    const unsubscribe = registerMessageListener((newMsg: Message) => {
+    const unsubscribe = registerMessageListener((rawMsg: Message) => {
+      const newMsg = normalizeMessage(rawMsg);
       // Check if message belongs to this conversation
       if (newMsg.conversationId === conversation.id) {
         setMessages((prev) => {
@@ -206,7 +208,8 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       }
 
       // Send message via SignalR hub invocation
-      const sentMessage = await sendMessage(conversation.id, content, tempId);
+      const rawSent = await sendMessage(conversation.id, content, tempId);
+      const sentMessage = normalizeMessage(rawSent);
 
       // Reconcile optimistic temp message with actual server message
       setMessages((prev) => {

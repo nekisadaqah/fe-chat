@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import * as signalR from '@microsoft/signalr';
 import { debugLogger } from '../api/debugLogger';
 import type { Message } from '../types/message';
+import { normalizeMessage } from '../types/message';
 
 type ConnectionState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING';
 
@@ -146,8 +147,9 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
 
     // Register incoming event handlers exactly once
     newConnection.on('ReceiveMessage', (message: Message) => {
-      debugLogger.addLog('SignalR', 'IN', 'ReceiveMessage', message);
-      messageListenersRef.current.forEach(cb => cb(message));
+      const normalized = normalizeMessage(message);
+      debugLogger.addLog('SignalR', 'IN', 'ReceiveMessage', normalized);
+      messageListenersRef.current.forEach(cb => cb(normalized));
     });
 
     newConnection.on('InitialOnlineUsers', (userIds: string[]) => {
@@ -376,7 +378,7 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
           content,
           clientMessageId
         });
-        return result as Message;
+        return normalizeMessage(result);
       } catch (err) {
         console.error('Failed to send message via SignalR', err);
         throw err;
