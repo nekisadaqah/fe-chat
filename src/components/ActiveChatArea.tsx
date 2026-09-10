@@ -36,11 +36,21 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
   const isPeerOnline = peer ? (onlineUsers[peer.id] ?? peer.isOnline) : false;
   const isPeerTyping = peer ? !!typingUsers[peer.id] : false;
 
-  // Load message history
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const isPrependingRef = useRef(false);
+  const scrollHeightBeforeUpdateRef = useRef(0);
+  const autoScrollBottomRef = useRef(true);
+
+  // Load initial page of message history
   useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true);
       setError(null);
+      setPage(1);
+      setHasMore(true);
+      autoScrollBottomRef.current = true;
       try {
         const response = await apiClient.get(`/api/Conversations/${conversation.id}/messages`, {
           params: { page: 1, pageSize: 50 }
@@ -48,6 +58,8 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         
         // PaginatedResponse shape contains .items
         const loadedMessages: Message[] = (response.data.items || []).map(normalizeMessage);
+        const hasNextPage = response.data.hasNextPage ?? (loadedMessages.length === 50);
+        setHasMore(hasNextPage);
         
         // Sort chronologically (oldest first)
         const sorted = [...loadedMessages].sort(
@@ -67,6 +79,52 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     }
   }, [conversation?.id]);
 
+  // Load older messages on scroll up
+  const loadOlderMessages = async () => {
+    if (loadingMore || !hasMore || loading || !conversation?.id) return;
+
+    if (scrollContainerRef.current) {
+      scrollHeightBeforeUpdateRef.current = scrollContainerRef.current.scrollHeight;
+    }
+    isPrependingRef.current = true;
+    autoScrollBottomRef.current = false;
+    setLoadingMore(true);
+
+    const nextPage = page + 1;
+    try {
+      const response = await apiClient.get(`/api/Conversations/${conversation.id}/messages`, {
+        params: { page: nextPage, pageSize: 50 }
+      });
+
+      const olderMessages: Message[] = (response.data.items || []).map(normalizeMessage);
+      const hasNextPage = response.data.hasNextPage ?? (olderMessages.length === 50);
+      setHasMore(hasNextPage);
+      setPage(nextPage);
+
+      if (olderMessages.length > 0) {
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newOlder = olderMessages.filter((m) => !existingIds.has(m.id));
+          const combined = [...newOlder, ...prev];
+          return combined.sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load older messages', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    if (scrollContainerRef.current.scrollTop < 50 && hasMore && !loadingMore && !loading) {
+      loadOlderMessages();
+    }
+  };
+
   // Listen for real-time messages from SignalR
   useEffect(() => {
     if (!conversation?.id) return;
@@ -75,6 +133,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       const newMsg = normalizeMessage(rawMsg);
       // Check if message belongs to this conversation
       if (newMsg.conversationId === conversation.id) {
+        autoScrollBottomRef.current = true;
         setMessages((prev) => {
           // 1. Check if backend message ID is already present in state
           if (prev.some((m) => m.id === newMsg.id)) {
@@ -110,15 +169,16 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     return unsubscribe;
   }, [conversation?.id, registerMessageListener]);
 
-  // Auto scroll to bottom
-  const scrollToBottom = () => {
-    if (scrollContainerRef.current) {
+  // Adjust scroll position after prepending older messages, or scroll to bottom on new messages
+  useEffect(() => {
+    if (isPrependingRef.current && scrollContainerRef.current) {
+      const newScrollHeight = scrollContainerRef.current.scrollHeight;
+      const diff = newScrollHeight - scrollHeightBeforeUpdateRef.current;
+      scrollContainerRef.current.scrollTop = diff;
+      isPrependingRef.current = false;
+    } else if (autoScrollBottomRef.current && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
   }, [messages, isPeerTyping]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,6 +377,7 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
       {/* Messages List Area */}
       <div 
         ref={scrollContainerRef}
+        onScroll={handleScroll}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -327,6 +388,11 @@ export const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
           background: 'rgba(0, 0, 0, 0.1)'
         }}
       >
+        {loadingMore && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '8px' }}>
+            <Loader2 className="spin" size={18} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-primary)' }} />
+          </div>
+        )}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
             <Loader2 className="spin" style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-primary)' }} />

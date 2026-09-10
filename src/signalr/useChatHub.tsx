@@ -63,6 +63,7 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
   const [reconnectCycles, setReconnectCycles] = useState<number>(0);
   const [reconnectSucceeded, setReconnectSucceeded] = useState<boolean | null>(null);
   const [finalCloseReason, setFinalCloseReason] = useState<string | null>(null);
+  const [freshReconnectCount, setFreshReconnectCount] = useState<number>(0);
 
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const messageListenersRef = useRef<Set<(message: Message) => void>>(new Set());
@@ -243,6 +244,21 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
           finalConnectionState: 'DISCONNECTED',
           connectionInstanceId
         });
+
+        // Fresh Connection Fallback: If connection closed with an error after reconnect attempts failed,
+        // schedule a fresh negotiate & connection cycle after a 3s delay to obtain a new connection ID.
+        if (error && !isStopped && activeInstanceIdRef.current === connectionInstanceId) {
+          debugLogger.addLog('SignalR', 'EVENT', 'SIGNALR_FRESH_RECONNECT_SCHEDULED', {
+            delayMs: 3000,
+            userId,
+            connectionInstanceId
+          });
+          setTimeout(() => {
+            if (!isStopped && activeInstanceIdRef.current === connectionInstanceId) {
+              setFreshReconnectCount(prev => prev + 1);
+            }
+          }, 3000);
+        }
       }
     });
 
@@ -345,7 +361,7 @@ export const ChatHubProvider: React.FC<ChatHubProviderProps> = ({ userId, childr
 
       previousStopPromiseRef.current = stopConnection();
     };
-  }, [userId]);
+  }, [userId, freshReconnectCount]);
 
   const sendTyping = async (recipientUserId: string, senderUsername: string) => {
     if (connectionRef.current && connectionState === 'CONNECTED') {
